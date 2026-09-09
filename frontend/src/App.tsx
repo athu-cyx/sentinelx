@@ -16,6 +16,12 @@ function App() {
   const [incidents, setIncidents] = useState<any[]>([])
   const [activity, setActivity] = useState<any[]>([])
 
+  // AI Security Copilot state
+  const [selectedIncident, setSelectedIncident] = useState<any | null>(null)
+  const [aiAnalysis, setAiAnalysis] = useState<string>('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string>('')
+
   useEffect(() => {
     async function loadDashboardStats() {
       try {
@@ -52,6 +58,11 @@ function App() {
         console.log('SentinelX Incidents:', data)
 
         setIncidents(data.incidents)
+
+        // Automatically select the latest incident
+        if (data.incidents && data.incidents.length > 0) {
+          setSelectedIncident(data.incidents[0])
+        }
       } catch (error) {
         console.error('Failed to fetch incidents:', error)
       }
@@ -81,6 +92,57 @@ function App() {
     loadIncidents()
     loadActivity()
   }, [])
+
+  // AI Security Copilot
+  async function analyzeIncident(incident: any) {
+    if (!incident?.incident_number) {
+      return
+    }
+
+    setSelectedIncident(incident)
+    setAiLoading(true)
+    setAiError('')
+    setAiAnalysis('')
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/api/incidents/${encodeURIComponent(
+          incident.incident_number
+        )}/analyze`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`AI API error: ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      console.log('SentinelX AI Analysis:', data)
+
+      if (data.ai_analysis?.success) {
+        setAiAnalysis(data.ai_analysis.analysis || 'No AI analysis returned.')
+      } else {
+        setAiError(
+          data.ai_analysis?.analysis ||
+            'AI Security Copilot is currently unavailable.'
+        )
+      }
+    } catch (error) {
+      console.error('Failed to analyze incident:', error)
+
+      setAiError(
+        'Unable to connect to SentinelX AI Security Copilot. Make sure the backend and Ollama are running.'
+      )
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   const activityPoints = activity
     .map((item, index) => {
@@ -141,7 +203,14 @@ function App() {
 
           <p className="nav-label">ANALYZE</p>
 
-          <button className="nav-item">
+          <button
+            className="nav-item"
+            onClick={() => {
+              if (selectedIncident) {
+                analyzeIncident(selectedIncident)
+              }
+            }}
+          >
             <span>◌</span>
             AI Security Copilot
           </button>
@@ -228,6 +297,7 @@ function App() {
 
             <div className="stat-header">
               <span>Total Events</span>
+
               <div className="stat-icon blue">
                 ◈
               </div>
@@ -341,7 +411,6 @@ function App() {
 
             </div>
 
-            {/* IMPORTANT: Chart wrapper */}
             <div className="chart">
 
               <div className="chart-y">
@@ -548,6 +617,8 @@ function App() {
                   <div
                     className="incident"
                     key={incident.incident_number}
+                    onClick={() => setSelectedIncident(incident)}
+                    style={{ cursor: 'pointer' }}
                   >
 
                     <div
@@ -615,30 +686,112 @@ function App() {
 
             </div>
 
-            <div className="ai-message">
+            {selectedIncident ? (
 
-              <p>
-                <strong>
-                  ⚠ High-priority activity detected.
-                </strong>
-              </p>
+              <>
 
-              <p>
-                Incident <strong>#INC-1048</strong> has a
-                <strong> 94/100 risk score</strong>.
-              </p>
+                {/* Selected Incident */}
+                <div className="ai-message">
 
-              <p>
-                The activity indicates a possible account compromise
-                based on abnormal login time, location and
-                authentication failures.
-              </p>
+                  <p>
+                    <strong>
+                      ⚠ {selectedIncident.severity?.toUpperCase()} threat detected.
+                    </strong>
+                  </p>
 
-            </div>
+                  <p>
+                    Incident{' '}
+                    <strong>
+                      #{selectedIncident.incident_number}
+                    </strong>
+                    {' '}has a{' '}
+                    <strong>
+                      {selectedIncident.risk_score}/100 risk score
+                    </strong>.
+                  </p>
 
-            <button className="investigate-button">
-              Investigate Incident →
-            </button>
+                  <p>
+                    Threat:{' '}
+                    <strong>
+                      {selectedIncident.threat_type?.replaceAll(
+                        '_',
+                        ' '
+                      )}
+                    </strong>
+                  </p>
+
+                  <p>
+                    Source:{' '}
+                    <strong>
+                      {selectedIncident.source_ip ||
+                        'Unknown'}
+                    </strong>
+                  </p>
+
+                  {aiLoading && (
+                    <p>
+                      <strong>
+                        ✦ AI Security Copilot is analyzing this incident...
+                      </strong>
+                    </p>
+                  )}
+
+                  {aiError && (
+                    <p>
+                      <strong>
+                        ⚠ {aiError}
+                      </strong>
+                    </p>
+                  )}
+
+                  {aiAnalysis && (
+                    <div
+                      style={{
+                        marginTop: '16px',
+                        whiteSpace: 'pre-wrap',
+                        lineHeight: '1.6',
+                        maxHeight: '300px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {aiAnalysis}
+                    </div>
+                  )}
+
+                </div>
+
+                <button
+                  className="investigate-button"
+                  onClick={() =>
+                    analyzeIncident(selectedIncident)
+                  }
+                  disabled={aiLoading}
+                >
+                  {aiLoading
+                    ? 'Analyzing...'
+                    : '✦ Analyze with AI →'}
+                </button>
+
+              </>
+
+            ) : (
+
+              <div className="ai-message">
+
+                <p>
+                  <strong>
+                    AI Security Copilot is ready.
+                  </strong>
+                </p>
+
+                <p>
+                  Select a security incident to begin AI-powered
+                  threat analysis.
+                </p>
+
+              </div>
+
+            )}
 
           </div>
 
