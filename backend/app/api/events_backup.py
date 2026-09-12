@@ -12,7 +12,6 @@ from app.services.incident_service import create_incident
 from app.services.notification_service import send_email_notification
 from app.services.response_service import execute_security_response
 from app.services.ml_service import predict_anomaly
-from app.services.api_key_auth import verify_api_key
 
 
 router = APIRouter(
@@ -142,9 +141,7 @@ def calculate_ml_features(
 def create_event(
     event: SecurityEventCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(
-        require_role("admin", "analyst")
-    ),
+    current_user: dict = Depends(require_role("admin", "analyst")),
 ):
     # ---------------------------------------------------------
     # 1. Create and store incoming security event
@@ -352,37 +349,6 @@ def create_event(
             "description": new_event.description,
         },
     }
-
-
-# ============================================================
-# COMPANY API KEY EVENT INGESTION
-# ============================================================
-
-@router.post("/ingest")
-def ingest_event(
-    event: SecurityEventCreate,
-    db: Session = Depends(get_db),
-    integration=Depends(verify_api_key),
-):
-    """
-    Receive security events from an integrated company application.
-
-    Authentication:
-        X-API-Key
-
-    The company does not need a SentinelX user account
-    to send security events.
-    """
-
-    return create_event(
-        event=event,
-        db=db,
-        current_user={
-            "username": f"integration:{integration.organization_name}",
-            "role": "integration",
-            "organization_name": integration.organization_name,
-        },
-    )
 
 
 @router.get("/")

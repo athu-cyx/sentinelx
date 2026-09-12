@@ -2,24 +2,25 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.auth import get_current_user, require_role
 from app.models.incident import Incident
 from app.services.ai_service import analyze_security_incident
 
-
 router = APIRouter(
     prefix="/api/incidents",
-    tags=["Incidents"],
+    tags=["Incidents"]
 )
 
 
 # ---------------------------------------------------------
-# Get recent incidents
+# GET ALL INCIDENTS
 # ---------------------------------------------------------
-
 @router.get("/")
 def get_incidents(
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
+
     incidents = (
         db.query(Incident)
         .order_by(Incident.created_at.desc())
@@ -29,19 +30,20 @@ def get_incidents(
 
     return {
         "count": len(incidents),
-        "incidents": incidents,
+        "incidents": incidents
     }
 
 
 # ---------------------------------------------------------
-# Get single incident
+# GET SINGLE INCIDENT
 # ---------------------------------------------------------
-
 @router.get("/{incident_number}")
 def get_incident(
     incident_number: str,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
+
     incident = (
         db.query(Incident)
         .filter(Incident.incident_number == incident_number)
@@ -51,7 +53,7 @@ def get_incident(
     if not incident:
         raise HTTPException(
             status_code=404,
-            detail="Incident not found.",
+            detail="Incident not found."
         )
 
     return {
@@ -69,14 +71,36 @@ def get_incident(
 
 
 # ---------------------------------------------------------
-# AI Security Copilot
+# UPDATE INCIDENT STATUS
 # ---------------------------------------------------------
-
-@router.post("/{incident_number}/analyze")
-def analyze_incident(
+@router.patch("/{incident_number}/status")
+def update_incident_status(
     incident_number: str,
+    status: str,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(
+        require_role("admin", "analyst")
+    ),
 ):
+
+    allowed_statuses = {
+        "open",
+        "investigating",
+        "contained",
+        "resolved"
+    }
+
+    status = status.lower().strip()
+
+    if status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Invalid incident status.",
+                "allowed_statuses": list(allowed_statuses)
+            }
+        )
+
     incident = (
         db.query(Incident)
         .filter(Incident.incident_number == incident_number)
@@ -86,7 +110,44 @@ def analyze_incident(
     if not incident:
         raise HTTPException(
             status_code=404,
-            detail="Incident not found.",
+            detail="Incident not found."
+        )
+
+    incident.status = status
+
+    db.commit()
+    db.refresh(incident)
+
+    return {
+        "success": True,
+        "message": "Incident status updated successfully.",
+        "incident_number": incident.incident_number,
+        "status": incident.status
+    }
+
+
+# ---------------------------------------------------------
+# AI INCIDENT ANALYSIS
+# ---------------------------------------------------------
+@router.post("/{incident_number}/analyze")
+def analyze_incident(
+    incident_number: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(
+        require_role("admin", "analyst")
+    ),
+):
+
+    incident = (
+        db.query(Incident)
+        .filter(Incident.incident_number == incident_number)
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found."
         )
 
     analysis = analyze_security_incident(
