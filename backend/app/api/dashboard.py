@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.auth import get_current_user
 from app.models.security_event import SecurityEvent
 
 
@@ -14,14 +15,29 @@ router = APIRouter(
 )
 
 
+# ---------------------------------------------------------
+# DASHBOARD STATS
+# ORGANIZATION ISOLATED
+# ---------------------------------------------------------
 @router.get("/stats")
 def get_dashboard_stats(
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
-    total_events = db.query(SecurityEvent).count()
+    organization_name = current_user.get("organization_name")
+
+    # Base query restricted to current organization
+    base_query = db.query(SecurityEvent)
+
+    if organization_name:
+        base_query = base_query.filter(
+            SecurityEvent.organization_name == organization_name
+        )
+
+    total_events = base_query.count()
 
     threats_detected = (
-        db.query(SecurityEvent)
+        base_query
         .filter(
             SecurityEvent.severity.in_(
                 ["medium", "high", "critical"]
@@ -31,39 +47,48 @@ def get_dashboard_stats(
     )
 
     critical_threats = (
-        db.query(SecurityEvent)
+        base_query
         .filter(
             SecurityEvent.severity == "critical"
         )
         .count()
     )
-    
+
     critical_count = (
-        db.query(SecurityEvent)
-        .filter(SecurityEvent.severity == "critical")
+        base_query
+        .filter(
+            SecurityEvent.severity == "critical"
+        )
         .count()
     )
 
     high_count = (
-        db.query(SecurityEvent)
-        .filter(SecurityEvent.severity == "high")
+        base_query
+        .filter(
+            SecurityEvent.severity == "high"
+        )
         .count()
     )
 
     medium_count = (
-        db.query(SecurityEvent)
-        .filter(SecurityEvent.severity == "medium")
+        base_query
+        .filter(
+            SecurityEvent.severity == "medium"
+        )
         .count()
     )
 
     low_count = (
-        db.query(SecurityEvent)
-        .filter(SecurityEvent.severity == "low")
+        base_query
+        .filter(
+            SecurityEvent.severity == "low"
+        )
         .count()
     )
 
     blocked_ips = (
-        db.query(SecurityEvent.source_ip)
+        base_query
+        .with_entities(SecurityEvent.source_ip)
         .filter(
             SecurityEvent.severity.in_(
                 ["high", "critical"]
@@ -75,6 +100,7 @@ def get_dashboard_stats(
     )
 
     return {
+        "organization_name": organization_name,
         "total_events": total_events,
         "threats_detected": threats_detected,
         "critical_threats": critical_threats,
@@ -85,25 +111,54 @@ def get_dashboard_stats(
         "low_count": low_count,
     }
 
-    from datetime import datetime, timedelta, timezone
-from sqlalchemy import func
 
-
+# ---------------------------------------------------------
+# DASHBOARD ACTIVITY
+# ORGANIZATION ISOLATED
+# ---------------------------------------------------------
 @router.get("/activity")
 def get_dashboard_activity(
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
+    organization_name = current_user.get("organization_name")
+
     now = datetime.now(timezone.utc)
     start_time = now - timedelta(hours=24)
 
-    results = (
+    query = (
         db.query(
-            func.date_trunc("hour", SecurityEvent.timestamp).label("hour"),
+            func.date_trunc(
+                "hour",
+                SecurityEvent.timestamp
+            ).label("hour"),
             func.count(SecurityEvent.id).label("count"),
         )
-        .filter(SecurityEvent.timestamp >= start_time)
-        .group_by(func.date_trunc("hour", SecurityEvent.timestamp))
-        .order_by(func.date_trunc("hour", SecurityEvent.timestamp))
+        .filter(
+            SecurityEvent.timestamp >= start_time
+        )
+    )
+
+    # Tenant / organization isolation
+    if organization_name:
+        query = query.filter(
+            SecurityEvent.organization_name == organization_name
+        )
+
+    results = (
+        query
+        .group_by(
+            func.date_trunc(
+                "hour",
+                SecurityEvent.timestamp
+            )
+        )
+        .order_by(
+            func.date_trunc(
+                "hour",
+                SecurityEvent.timestamp
+            )
+        )
         .all()
     )
 
@@ -116,6 +171,7 @@ def get_dashboard_activity(
         })
 
     return {
+        "organization_name": organization_name,
         "period": "last_24_hours",
         "activity": activity,
     }

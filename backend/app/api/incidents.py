@@ -14,6 +14,7 @@ router = APIRouter(
 
 # ---------------------------------------------------------
 # GET ALL INCIDENTS
+# ORGANIZATION ISOLATED
 # ---------------------------------------------------------
 @router.get("/")
 def get_incidents(
@@ -21,8 +22,18 @@ def get_incidents(
     current_user: dict = Depends(get_current_user),
 ):
 
+    organization_name = current_user.get("organization_name")
+
+    query = db.query(Incident)
+
+    # Tenant / organization isolation
+    if organization_name:
+        query = query.filter(
+            Incident.organization_name == organization_name
+        )
+
     incidents = (
-        db.query(Incident)
+        query
         .order_by(Incident.created_at.desc())
         .limit(10)
         .all()
@@ -36,6 +47,7 @@ def get_incidents(
 
 # ---------------------------------------------------------
 # GET SINGLE INCIDENT
+# ORGANIZATION ISOLATED
 # ---------------------------------------------------------
 @router.get("/{incident_number}")
 def get_incident(
@@ -44,11 +56,22 @@ def get_incident(
     current_user: dict = Depends(get_current_user),
 ):
 
-    incident = (
+    organization_name = current_user.get("organization_name")
+
+    query = (
         db.query(Incident)
-        .filter(Incident.incident_number == incident_number)
-        .first()
+        .filter(
+            Incident.incident_number == incident_number
+        )
     )
+
+    # Tenant / organization isolation
+    if organization_name:
+        query = query.filter(
+            Incident.organization_name == organization_name
+        )
+
+    incident = query.first()
 
     if not incident:
         raise HTTPException(
@@ -59,6 +82,7 @@ def get_incident(
     return {
         "incident_number": incident.incident_number,
         "event_id": incident.event_id,
+        "organization_name": incident.organization_name,
         "threat_type": incident.threat_type,
         "source_ip": incident.source_ip,
         "username": incident.username,
@@ -72,6 +96,7 @@ def get_incident(
 
 # ---------------------------------------------------------
 # UPDATE INCIDENT STATUS
+# ORGANIZATION ISOLATED
 # ---------------------------------------------------------
 @router.patch("/{incident_number}/status")
 def update_incident_status(
@@ -101,11 +126,22 @@ def update_incident_status(
             }
         )
 
-    incident = (
+    organization_name = current_user.get("organization_name")
+
+    query = (
         db.query(Incident)
-        .filter(Incident.incident_number == incident_number)
-        .first()
+        .filter(
+            Incident.incident_number == incident_number
+        )
     )
+
+    # Tenant / organization isolation
+    if organization_name:
+        query = query.filter(
+            Incident.organization_name == organization_name
+        )
+
+    incident = query.first()
 
     if not incident:
         raise HTTPException(
@@ -128,6 +164,7 @@ def update_incident_status(
 
 # ---------------------------------------------------------
 # AI INCIDENT ANALYSIS
+# ORGANIZATION ISOLATED
 # ---------------------------------------------------------
 @router.post("/{incident_number}/analyze")
 def analyze_incident(
@@ -138,11 +175,22 @@ def analyze_incident(
     ),
 ):
 
-    incident = (
+    organization_name = current_user.get("organization_name")
+
+    query = (
         db.query(Incident)
-        .filter(Incident.incident_number == incident_number)
-        .first()
+        .filter(
+            Incident.incident_number == incident_number
+        )
     )
+
+    # Tenant / organization isolation
+    if organization_name:
+        query = query.filter(
+            Incident.organization_name == organization_name
+        )
+
+    incident = query.first()
 
     if not incident:
         raise HTTPException(
@@ -161,6 +209,7 @@ def analyze_incident(
 
     return {
         "incident_number": incident.incident_number,
+        "organization_name": incident.organization_name,
         "risk_score": incident.risk_score,
         "severity": incident.severity,
         "ai_analysis": analysis,

@@ -35,10 +35,23 @@ class User(Base):
         nullable=False,
     )
 
+    # Supported roles:
+    # super_admin -> SentinelX platform administrator
+    # admin       -> Organization/customer administrator
+    # analyst     -> Security analyst
+    # viewer      -> Read-only user
     role: Mapped[str] = mapped_column(
         String(30),
         default="viewer",
         nullable=False,
+        index=True,
+    )
+
+    # Super Admin can have no organization.
+    # Customer users must belong to an organization.
+    organization_name: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
         index=True,
     )
 

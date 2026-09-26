@@ -14,6 +14,7 @@ def create_incident(
     severity: str,
     risk_score: int,
     description: str | None,
+    organization_name: str | None = None,
 ) -> Incident:
     """
     Create an incident for a detected security threat.
@@ -24,6 +25,7 @@ def create_incident(
     incident = Incident(
         incident_number=incident_number,
         event_id=event_id,
+        organization_name=organization_name,
         threat_type=threat_type,
         source_ip=source_ip,
         username=username,

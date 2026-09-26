@@ -16,6 +16,12 @@ class SecurityEvent(Base):
         default=lambda: str(uuid4()),
     )
 
+    organization_name: Mapped[str] = mapped_column(
+        String(150),
+        nullable=False,
+        index=True,
+    )
+
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

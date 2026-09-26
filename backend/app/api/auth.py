@@ -53,6 +53,7 @@ def login(
     access_token = create_access_token(
         username=user.username,
         role=user.role,
+        organization_name=user.organization_name,
     )
 
     return {
@@ -64,5 +65,6 @@ def login(
             "username": user.username,
             "email": user.email,
             "role": user.role,
+            "organization_name": user.organization_name,
         },
     }

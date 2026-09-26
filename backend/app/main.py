@@ -9,6 +9,8 @@ from app.api.dashboard import router as dashboard_router
 from app.api.incidents import router as incidents_router
 from app.api.auth import router as auth_router
 from app.api.integrations import router as integrations_router
+from app.api.organizations import router as organizations_router
+from app.api.customers import router as customers_router
 
 app = FastAPI(
     title="SentinelX API",
@@ -31,6 +33,8 @@ app.include_router(dashboard_router)
 app.include_router(incidents_router)
 app.include_router(auth_router)
 app.include_router(integrations_router)
+app.include_router(organizations_router)
+app.include_router(customers_router)
 
 @app.get("/")
 def root():

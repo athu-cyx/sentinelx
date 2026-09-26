@@ -14,12 +14,15 @@ def detect_threat(
     source_ip: str | None,
     username: str | None,
     event_type: str,
+    organization_name: str | None = None,
 ) -> dict:
     """
     Analyze a security event and detect suspicious activity.
+
+    Detection is isolated by organization when organization_name
+    is provided.
     """
 
-    # Default result for a normal event
     result = {
         "detected": False,
         "threat_type": None,
@@ -28,14 +31,12 @@ def detect_threat(
         "reason": "No suspicious activity detected.",
     }
 
-    # We currently focus on failed-login detection
     if event_type != "failed_login":
         return result
 
     if not source_ip:
         return result
 
-    # Look back over the configured time window
     current_time = datetime.now(timezone.utc)
     start_time = current_time - timedelta(minutes=TIME_WINDOW_MINUTES)
 
@@ -45,13 +46,20 @@ def detect_threat(
         SecurityEvent.timestamp >= start_time,
     )
 
-    # If username is available, include it in the analysis
+    # Organization isolation
+    if organization_name:
+        query = query.filter(
+            SecurityEvent.organization_name == organization_name
+        )
+
+    # Username isolation
     if username:
-        query = query.filter(SecurityEvent.username == username)
+        query = query.filter(
+            SecurityEvent.username == username
+        )
 
     failed_login_count = query.count()
 
-    # Brute-force detection
     if failed_login_count >= FAILED_LOGIN_THRESHOLD:
         result = {
             "detected": True,
@@ -60,7 +68,8 @@ def detect_threat(
             "severity": "high",
             "reason": (
                 f"{failed_login_count} failed login attempts detected "
-                f"from the same source within {TIME_WINDOW_MINUTES} minutes."
+                f"from the same source within "
+                f"{TIME_WINDOW_MINUTES} minutes."
             ),
         }
 

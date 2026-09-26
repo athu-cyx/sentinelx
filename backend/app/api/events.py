@@ -34,6 +34,7 @@ class SecurityEventCreate(BaseModel):
 def calculate_ml_features(
     db: Session,
     source_ip: str | None,
+    organization_name: str,
     username: str | None,
     device: str | None,
     location: str | None,
@@ -47,6 +48,7 @@ def calculate_ml_features(
 
     # Recent events for the same source IP
     ip_query = db.query(SecurityEvent).filter(
+        SecurityEvent.organization_name == organization_name,
         SecurityEvent.timestamp >= start_time,
         SecurityEvent.timestamp <= event_timestamp,
     )
@@ -78,6 +80,7 @@ def calculate_ml_features(
         previous_ip_event = (
             db.query(SecurityEvent)
             .filter(
+                SecurityEvent.organization_name == organization_name,
                 SecurityEvent.username == username,
                 SecurityEvent.source_ip == source_ip,
                 SecurityEvent.timestamp < event_timestamp,
@@ -95,6 +98,7 @@ def calculate_ml_features(
         previous_device_event = (
             db.query(SecurityEvent)
             .filter(
+                SecurityEvent.organization_name == organization_name,
                 SecurityEvent.username == username,
                 SecurityEvent.device == device,
                 SecurityEvent.timestamp < event_timestamp,
@@ -112,6 +116,7 @@ def calculate_ml_features(
         location_events = (
             db.query(SecurityEvent)
             .filter(
+                SecurityEvent.organization_name == organization_name,
                 SecurityEvent.username == username,
                 SecurityEvent.timestamp >= start_time,
                 SecurityEvent.timestamp <= event_timestamp,
@@ -145,6 +150,7 @@ def create_event(
     current_user: dict = Depends(
         require_role("admin", "analyst")
     ),
+    organization_name: str = "Internal",
 ):
     # ---------------------------------------------------------
     # 1. Create and store incoming security event
@@ -153,6 +159,7 @@ def create_event(
     event_timestamp = datetime.now(timezone.utc)
 
     new_event = SecurityEvent(
+        organization_name=organization_name,
         timestamp=event_timestamp,
         event_type=event.event_type,
         source_ip=event.source_ip,
@@ -178,6 +185,7 @@ def create_event(
         source_ip=new_event.source_ip,
         username=new_event.username,
         event_type=new_event.event_type,
+        organization_name=organization_name,
     )
 
     # ---------------------------------------------------------
@@ -187,6 +195,7 @@ def create_event(
     ml_features = calculate_ml_features(
         db=db,
         source_ip=new_event.source_ip,
+        organization_name=organization_name,
         username=new_event.username,
         device=new_event.device,
         location=new_event.location,
@@ -266,13 +275,12 @@ def create_event(
             threat_type=detection["threat_type"],
             source_ip=new_event.source_ip,
             username=new_event.username,
+            organization_name=new_event.organization_name,
             severity=detection["severity"],
             risk_score=detection["risk_score"],
             description=detection["reason"],
         )
 
-        # -----------------------------------------------------
-        # 7. Automatic email notification
         # -----------------------------------------------------
 
         if incident and detection["severity"] in ["high", "critical"]:
@@ -342,6 +350,7 @@ def create_event(
 
         "event": {
             "id": new_event.id,
+            "organization_name": new_event.organization_name,
             "timestamp": new_event.timestamp,
             "event_type": new_event.event_type,
             "source_ip": new_event.source_ip,
@@ -382,6 +391,7 @@ def ingest_event(
             "role": "integration",
             "organization_name": integration.organization_name,
         },
+        organization_name=integration.organization_name,
     )
 
 
@@ -390,12 +400,26 @@ def get_events(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    organization_name = current_user.get("organization_name")
+
+    query = db.query(SecurityEvent)
+
+    if organization_name:
+        query = query.filter(
+            SecurityEvent.organization_name == organization_name
+        )
+
     events = (
-        db.query(SecurityEvent)
+        query
         .order_by(SecurityEvent.timestamp.desc())
         .limit(100)
         .all()
     )
+
+    return {
+        "count": len(events),
+        "events": events,
+    }
 
     return {
         "count": len(events),
